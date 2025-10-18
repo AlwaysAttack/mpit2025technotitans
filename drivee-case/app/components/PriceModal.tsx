@@ -209,13 +209,13 @@ export function PriceModal({ visible, onClose, onPriceSubmit }: PriceModalProps)
           )}
 
           {/* Разделитель */}
-          <View className="border-t border-gray-300 mb-4" />
+          <View className="border-t border-gray-700 mb-4" />
 
           {/* Кнопка Готово */}
           <Button
             onPress={handleSubmit}
             disabled={isSubmitDisabled}
-            className={`rounded-2xl py-4 ${isSubmitDisabled ? 'bg-gray-400' : 'bg-blue-500'}`}
+            className={`rounded-2xl justify-center ${isSubmitDisabled ? 'bg-gray-400' : 'bg-blue-500'}`}
           >
             <View className="flex-row items-center justify-center">
               <Icon as={Check} className="size-5 text-white mr-2" />

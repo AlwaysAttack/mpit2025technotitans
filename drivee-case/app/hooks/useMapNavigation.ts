@@ -97,14 +97,20 @@ export function useMapNavigation() {
   }, [mapState.userLocation, mapState.destination]);
 
   // Подгон карты под маршрут
-  const fitMapToRoute = useCallback(() => {
-    if (mapState.routeCoordinates.length > 0 && mapRef.current) {
-      mapRef.current.fitToCoordinates(mapState.routeCoordinates, {
-        edgePadding: { top: 50, right: 50, bottom: 200, left: 50 },
-        animated: true,
-      });
-    }
-  }, [mapState.routeCoordinates]);
+  // В useMapNavigation.ts обновим fitMapToRoute
+const fitMapToRoute = useCallback(() => {
+  if (mapState.routeCoordinates.length > 0 && mapRef.current) {
+    mapRef.current.fitToCoordinates(mapState.routeCoordinates, {
+      edgePadding: { 
+        top: 100, 
+        right: 50, 
+        bottom: 300, // Увеличиваем снизу чтобы не перекрывало панель
+        left: 50 
+      },
+      animated: true,
+    });
+  }
+}, [mapState.routeCoordinates]);
 
   // Расчет маршрута через OSRM API
   const calculateRoute = useCallback(async (start: Coordinate, end: Coordinate) => {
@@ -113,7 +119,7 @@ export function useMapNavigation() {
         `https://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=geojson`
       );
       const data = await response.json();
-
+  
       if (data.routes && data.routes.length > 0) {
         const route = data.routes[0];
         const coordinates = route.geometry.coordinates.map((coord: number[]) => ({
@@ -126,19 +132,38 @@ export function useMapNavigation() {
           duration: route.duration,
         });
         
-        fitMapToRoute();
+        // Гарантированное выравнивание после установки состояния
+        setTimeout(() => {
+          if (mapRef.current && coordinates.length > 0) {
+            console.log('🗺️ Fitting map to route coordinates:', coordinates.length);
+            mapRef.current.fitToCoordinates(coordinates, {
+              edgePadding: { top: 100, right: 50, bottom: 300, left: 50 },
+              animated: true,
+            });
+          }
+        }, 300);
       }
     } catch (error) {
       console.error('Error calculating route:', error);
-      // Fallback: простой маршрут
       const distance = calculateDistance(start, end);
       const duration = calculateDuration(distance);
       
       setRoute([start, end], { distance, duration });
-      fitMapToMarkers();
+      
+      // Выравнивание по маркерам при ошибке
+      setTimeout(() => {
+        if (mapRef.current && start && end) {
+          console.log('🗺️ Fitting map to markers (fallback)');
+          mapRef.current.fitToCoordinates([start, end], {
+            edgePadding: { top: 100, right: 50, bottom: 300, left: 50 },
+            animated: true,
+          });
+        }
+      }, 300);
     }
-  }, [setRoute, fitMapToRoute, fitMapToMarkers]);
-
+  }, [setRoute, mapRef]);
+  
+  
   // Вспомогательные функции
   const calculateDistance = (start: Coordinate, end: Coordinate): number => {
     const R = 6371e3;

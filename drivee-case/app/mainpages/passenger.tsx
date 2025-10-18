@@ -1,6 +1,6 @@
 import { Text } from '@/components/ui/text';
 import { Stack, useRouter } from 'expo-router';
-import { View, Dimensions, TextInput, Modal, TouchableOpacity, FlatList, Alert } from 'react-native';
+import { View, Dimensions, TextInput, Modal, TouchableOpacity, FlatList, Alert, Animated } from 'react-native';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Menu, Share, Navigation, Car, MapPin, Clock, Dot, SlidersHorizontalIcon, RussianRuble, X, Search } from 'lucide-react-native';
@@ -12,7 +12,12 @@ import { AppLogo } from '../components/AppLogo';
 import { SideMenu } from '../components/SideMenu';
 import MapComponent from '../components/MapComponent';
 import { useMapNavigation } from '../hooks/useMapNavigation';
-import { OrderConfirmDialog } from '../components/OrderConfirmDialog'; // Добавляем импорт
+import { OrderConfirmDialog } from '../components/OrderConfirmDialog';
+import { PassengerPanel } from '../components/PassengerPanel';
+import { usePassengerPanel } from '../hooks/usePassengerPanel';
+import { useOrders, Order } from '../providers/OrdersProvider';
+import { useWebSocket } from '../hooks/useWebSocket';
+
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -26,6 +31,19 @@ type AddressSuggestion = {
 type TripType = 'ride' | 'intercity' | 'courier';
 
 export default function Account2Screen() {
+  // Анимация для верхней панели
+  const [topPanelOpacity] = useState(new Animated.Value(1));
+  const { addOrder } = useOrders();
+  const { sendOrder } = useWebSocket();
+
+  const animateTopPanel = (toValue: number) => {
+    Animated.timing(topPanelOpacity, {
+      toValue,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  };
+
   const {
     mapState,
     mapRef,
@@ -47,15 +65,21 @@ export default function Account2Screen() {
   const [selectedPrice, setSelectedPrice] = useState('Предложите цену');
   const [selectedTripType, setSelectedTripType] = useState<TripType>('ride');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isOrderConfirmOpen, setIsOrderConfirmOpen] = useState(false); // Новое состояние для диалога
+  const [isOrderConfirmOpen, setIsOrderConfirmOpen] = useState(false);
   const { colorScheme } = useColorScheme();
+
+  // Используем хук панели в родительском компоненте
+  const { state: panelState, send: sendPanel, context, updateContext, updatePrice } = usePassengerPanel({
+    destination: mapState.destination,
+    routeInfo: mapState.routeInfo,
+  });
 
   const BOTTOM_PANEL_HEIGHT = 280;
   const TOP_PANEL_HEIGHT = 100;
   
   const mapPadding = {
     top: TOP_PANEL_HEIGHT,
-    bottom: BOTTOM_PANEL_HEIGHT,
+    bottom: panelState === 'searching_driver' ? 0 : BOTTOM_PANEL_HEIGHT,
     left: 0,
     right: 0
   };
@@ -81,7 +105,14 @@ export default function Account2Screen() {
   };
   
   const handlePriceSubmit = (price: number) => {
+    console.log('💰 Parent received price:', price);
     setSelectedPrice(`${price}₽`);
+    setIsPriceSheetOpen(false);
+  };
+
+  const handleStartOrder = () => {
+    console.log('🔄 Opening order confirmation dialog');
+    setIsOrderConfirmOpen(true);
   };
 
   const colors = {
@@ -104,6 +135,24 @@ export default function Account2Screen() {
       }
     })();
   }, []);
+
+  // Обновляем контекст при изменении mapState
+  useEffect(() => {
+    updateContext({
+      destination: mapState.destination,
+      routeInfo: mapState.routeInfo,
+    });
+  }, [mapState.destination, mapState.routeInfo, updateContext]);
+
+  // Обновляем цену при изменении selectedPrice
+  useEffect(() => {
+    if (selectedPrice && selectedPrice !== 'Предложите цену') {
+      const numericPrice = parseInt(selectedPrice.replace('₽', ''));
+      if (!isNaN(numericPrice)) {
+        updatePrice(numericPrice);
+      }
+    }
+  }, [selectedPrice, updatePrice]);
 
   const reverseGeocode = async (latitude: number, longitude: number): Promise<string> => {
     try {
@@ -162,20 +211,54 @@ export default function Account2Screen() {
   };
 
   const selectAddress = (address: AddressSuggestion) => {
+    console.log('📍 Address selected:', address.display_name);
+    console.log('📍 User location:', mapState.userLocation);
+    console.log('📍 Map ref available:', !!mapRef.current);
+    console.log('📍 fitMapToMarkers available:', !!fitMapToMarkers);
+  
     const newDestination = {
       latitude: parseFloat(address.lat),
       longitude: parseFloat(address.lon),
     };
-
+  
     setDestination(newDestination, address.display_name.split(',')[0]);
     setIsSearchModalOpen(false);
     setSearchQuery('');
     setSearchResults([]);
-
+  
     if (mapState.userLocation) {
+      console.log('🔄 Calculating route...');
       calculateRoute(mapState.userLocation, newDestination);
+      
+      // Автовыравнивание
+      setTimeout(() => {
+        console.log('🗺️ Attempting auto-fit...');
+        
+        // Проверяем что оба значения не null
+        if (mapRef.current && mapState.userLocation) {
+          console.log('✅ Using direct fitToCoordinates');
+          const coordinates = [
+            mapState.userLocation, // Это точно не null из условия выше
+            newDestination
+          ];
+          mapRef.current.fitToCoordinates(coordinates, {
+            edgePadding: { top: 100, right: 50, bottom: 300, left: 50 },
+            animated: true,
+          });
+        } else if (fitMapToMarkers) {
+          console.log('✅ Using fitMapToMarkers');
+          fitMapToMarkers();
+        } else {
+          console.log('❌ Cannot auto-fit - missing requirements');
+        }
+      }, 1000);
+    } else {
+      console.log('❌ No user location available');
     }
   };
+  
+  
+  
 
   const formatDistance = (meters: number): string => {
     if (meters < 1000) {
@@ -208,7 +291,6 @@ export default function Account2Screen() {
 
   // Обработчик нажатия на кнопку "Заказать"
   const handleOrderPress = () => {
-    // Проверяем, что все необходимые данные заполнены
     if (!mapState.userLocation || !mapState.destination || !mapState.routeInfo) {
       Alert.alert('Ошибка', 'Пожалуйста, укажите пункт назначения');
       return;
@@ -219,39 +301,39 @@ export default function Account2Screen() {
       return;
     }
 
-    // Открываем диалог подтверждения
     setIsOrderConfirmOpen(true);
   };
 
   // Подтверждение заказа
   const handleOrderConfirm = () => {
-    // Закрываем диалог
     setIsOrderConfirmOpen(false);
-    
-    // Здесь можно добавить логику отправки заказа на сервер
-    console.log('Заказ подтвержден:', {
-      start: mapState.currentAddress,
-      end: mapState.destinationAddress,
-      distance: mapState.routeInfo?.distance,
-      duration: mapState.routeInfo?.duration,
-      price: selectedPrice
+    animateTopPanel(0);
+  
+    const order = addOrder({
+      passengerId: 'current-user-id',
+      passengerName: 'Пассажир',
+      rating: 5.0,
+      carModel: 'Любой',
+      timeToArrival: '5-10 мин',
+      price: parseInt(selectedPrice.replace('₽', '')) || 0,
+      startAddress: mapState.currentAddress || '',
+      endAddress: mapState.destinationAddress || '',
+      distance: mapState.routeInfo?.distance || 0,
+      duration: mapState.routeInfo?.duration || 0,
+      startLocation: mapState.userLocation || { latitude: 0, longitude: 0 },
+      endLocation: mapState.destination || { latitude: 0, longitude: 0 },
     });
-
-    // Показываем уведомление об успешном заказе
-    Alert.alert(
-      'Успешно!', 
-      'Ваш заказ принят. Ожидайте водителя.',
-      [{ text: 'OK', onPress: () => console.log('Order confirmed') }]
-    );
-
-    // Можно также сбросить состояние после заказа
-    // clearDestination();
-    // setSelectedPrice('Предложите цену');
+  
+    // Отправляем через WebSocket
+    sendOrder(order);
+    
+    sendPanel({ type: 'CONFIRM_ORDER' });
   };
 
   // Отмена заказа
   const handleOrderCancel = () => {
     setIsOrderConfirmOpen(false);
+    animateTopPanel(1);
   };
 
   return (
@@ -276,7 +358,11 @@ export default function Account2Screen() {
         />
 
         <View className="flex-1 justify-end">
-          <View className={`mx-4 mb-2 p-4 rounded-2xl shadow-lg ${colors.card}`}>
+          {/* Анимированный блок "Точка подачи" */}
+          <Animated.View 
+            style={{ opacity: topPanelOpacity }}
+            className={`mx-4 mb-2 p-4 rounded-2xl shadow-lg ${colors.card}`}
+          >
             <View className="flex-row items-center justify-between">
               <View className="flex-1">
                 <Text className={`text-sm ${colors.textSecondary}`}>Точка подачи</Text>
@@ -293,175 +379,95 @@ export default function Account2Screen() {
                 <Icon as={Navigation} className={`size-5 ${colorScheme === 'dark' ? 'text-white' : 'text-black'}`} />
               </Button>
             </View>
-          </View>
+          </Animated.View>
 
-          <View className={`min-h-0 rounded-t-3xl ${colors.card}`}>
-            <View className="p-5">
-              <View className={`flex-row rounded-2xl p-1 mb-4 ${colors.button}`}>
-                {tripTabs.map((tab) => (
-                  <Button
-                    key={tab.id}
-                    variant="ghost"
-                    className={`flex-1 rounded-xl ${
-                      selectedTripType === tab.id ? colors.buttonActive : ''
-                    }`}
-                    onPress={() => setSelectedTripType(tab.id)}
-                  >
-                    <Text 
-                      className={
-                        selectedTripType === tab.id 
-                          ? `font-semibold ${colors.textPrimary}`
-                          : colors.textSecondary
-                      }
-                    >
-                      {tab.label}
-                    </Text>
-                  </Button>
-                ))}
-              </View>
-
-              <View className="gap-3 mb-4">
-                <TouchableOpacity 
-                  className={`flex-row items-center justify-between rounded-2xl p-3 ${colors.button}`}
-                  onPress={openSearchModal}
-                >
-                  <View className="flex-row items-center flex-1">
-                    <Icon as={MapPin} className={`size-4 ml-1 mr-2 ${colors.textSecondary}`} />
-                    <View className="flex-row gap-2 justify-center items-center">
-                      <Text 
-                        className={`text-sm ${mapState.destination ? colors.textPrimary : colors.textSecondary}`}
-                      >
-                        {mapState.destinationAddress || 'Куда?'}
-                      </Text>
-                      {mapState.routeInfo && (
-                        <Text className={`text-xs ${colors.textSecondary} mt-1`}>
-                          {formatDistance(mapState.routeInfo.distance)}
-                        </Text>
-                      )}
-                    </View>
-                  </View>
-                  {mapState.destination ? (
-                    <TouchableOpacity 
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        clearDestination();
-                      }}
-                      className="p-1"
-                    >
-                      <Icon as={X} className={`size-4 ${colors.textSecondary}`} />
-                    </TouchableOpacity>
-                  ) : (
-                    <Icon as={Search} className={`size-4 mr-2 ${colors.textSecondary}`} />
-                  )}
-                </TouchableOpacity>
-
-                <View 
-                  className={`flex-row items-center justify-between rounded-2xl p-4 ${colors.button}`}
-                  onTouchEnd={handlePriceFieldPress}
-                >
-                  <View>
-                    <View className="flex-row items-center">
-                      <Icon as={RussianRuble} className={`size-4 mr-2 ${colors.textPrimary}`} />
-                      <Text className={`text-ls ${colors.textSecondary}`}>
-                        {selectedPrice}
-                      </Text>
-                    </View>
-                  </View>
-                  <View />
-                </View>
-              </View>
-
-              <View className="flex-row items-center gap-3">
-                <Button 
-                  className={`flex-1 rounded-2xl h-15 ${colors.primary}`}
-                  onPress={handleOrderPress} // Изменяем на handleOrderPress
-                  disabled={!mapState.destination}
-                >
-                  <View className="flex-row items-center justify-center gap-1">
-                    <Text className="text-white text-lg font-semibold">Заказать</Text>
-                    <Icon as={Dot} className="size-5 text-white" />
-                    <Text className="text-white text-lg">
-                      {mapState.routeInfo ? formatDuration(mapState.routeInfo.duration) : ''}
-                    </Text>
-                  </View>
-                </Button>
-                
-                <Button 
-                  variant="ghost" 
-                  size="icon"
-                  className={`rounded-2xl ${colorScheme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}
-                >
-                  <Icon as={SlidersHorizontalIcon} className={`size-5 ${colorScheme === 'dark' ? 'text-white' : 'text-black'}`} />
-                </Button>
-              </View>
-            </View>
-          </View>
+          <PassengerPanel
+            mapState={mapState}
+            selectedPrice={selectedPrice}
+            onSearchPress={openSearchModal}
+            onPricePress={handlePriceFieldPress}
+            onClearDestination={clearDestination}
+            onTripTypeChange={setSelectedTripType}
+            onPriceSubmit={handlePriceSubmit}
+            onStartOrder={handleStartOrder}
+            formatDistance={formatDistance}
+            formatDuration={formatDuration}
+            panelState={panelState}
+            sendPanel={sendPanel}
+            panelContext={context}
+          />
         </View>
 
         <Modal
-          visible={isSearchModalOpen}
-          animationType="slide"
-          presentationStyle="pageSheet"
+  visible={isSearchModalOpen}
+  animationType="slide"
+  presentationStyle="pageSheet"
+  onShow={() => console.log('🔍 Search modal opened')}
+>
+  <View className={`flex-1 ${colors.background}`}>
+    <View className="flex-row items-center p-4 border-b border-gray-700">
+      <Button
+        size="icon"
+        variant="ghost"
+        onPress={() => {
+          console.log('❌ Closing search modal');
+          setIsSearchModalOpen(false);
+          setSearchQuery('');
+          setSearchResults([]);
+        }}
+      >
+        <Icon as={X} className="size-5" />
+      </Button>
+      <Text className="text-lg font-semibold ml-4 flex-1">Куда едем?</Text>
+    </View>
+
+    <View className="p-4">
+      <View className={`flex-row items-center rounded-2xl px-4 py-3 ${colors.button}`}>
+        <Icon as={Search} className={`size-5 mr-3 ${colors.textSecondary}`} />
+        <TextInput
+          value={searchQuery}
+          onChangeText={(text) => {
+            console.log('🔍 Search query:', text);
+            setSearchQuery(text);
+            searchAddresses(text);
+          }}
+          placeholder="Введите адрес..."
+          placeholderTextColor={colors.textSecondary}
+          className={`flex-1 text-lg ${colors.textPrimary}`}
+          autoFocus
+        />
+      </View>
+    </View>
+
+    <FlatList
+      data={searchResults}
+      keyExtractor={(item) => item.place_id}
+      renderItem={({ item }) => (
+        <TouchableOpacity
+          className={`p-4 border-b ${colors.border}`}
+          onPress={() => {
+            console.log('🎯 Address item pressed:', item.display_name);
+            selectAddress(item);
+          }}
         >
-          <View className={`flex-1 ${colors.background}`}>
-            <View className="flex-row items-center p-4 border-b border-gray-200">
-              <Button
-                size="icon"
-                variant="ghost"
-                onPress={() => {
-                  setIsSearchModalOpen(false);
-                  setSearchQuery('');
-                  setSearchResults([]);
-                }}
-              >
-                <Icon as={X} className="size-5" />
-              </Button>
-              <Text className="text-lg font-semibold ml-4 flex-1">Куда едем?</Text>
-            </View>
-
-            <View className="p-4">
-              <View className={`flex-row items-center rounded-2xl px-4 py-3 ${colors.button}`}>
-                <Icon as={Search} className={`size-5 mr-3 ${colors.textSecondary}`} />
-                <TextInput
-                  value={searchQuery}
-                  onChangeText={(text) => {
-                    setSearchQuery(text);
-                    searchAddresses(text);
-                  }}
-                  placeholder="Введите адрес..."
-                  placeholderTextColor={colors.textSecondary}
-                  className={`flex-1 text-lg ${colors.textPrimary}`}
-                  autoFocus
-                />
-              </View>
-            </View>
-
-            <FlatList
-              data={searchResults}
-              keyExtractor={(item) => item.place_id}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  className={`p-4 border-b ${colors.border}`}
-                  onPress={() => selectAddress(item)}
-                >
-                  <Text className={`text-lg ${colors.textPrimary}`}>
-                    {item.display_name.split(',').slice(0, 2).join(', ')}
-                  </Text>
-                  <Text className={`text-sm ${colors.textSecondary} mt-1`}>
-                    {item.display_name.split(',').slice(2).join(', ')}
-                  </Text>
-                </TouchableOpacity>
-              )}
-              ListEmptyComponent={
-                searchQuery && !isSearching ? (
-                  <Text className={`text-center p-4 ${colors.textSecondary}`}>
-                    Адрес не найден
-                  </Text>
-                ) : null
-              }
-            />
-          </View>
-        </Modal>
+          <Text className={`text-lg ${colors.textPrimary}`}>
+            {item.display_name.split(',').slice(0, 2).join(', ')}
+          </Text>
+          <Text className={`text-sm ${colors.textSecondary} mt-1`}>
+            {item.display_name.split(',').slice(2).join(', ')}
+          </Text>
+        </TouchableOpacity>
+      )}
+      ListEmptyComponent={
+        searchQuery && !isSearching ? (
+          <Text className={`text-center p-4 ${colors.textSecondary}`}>
+            Адрес не найден
+          </Text>
+        ) : null
+      }
+    />
+  </View>
+</Modal>
 
         {!locationGranted && (
           <View className="absolute top-20 left-4 right-4 bg-gray-800 p-3 rounded-lg">
@@ -471,23 +477,29 @@ export default function Account2Screen() {
           </View>
         )}
 
-        <OrderConfirmDialog
-          visible={isOrderConfirmOpen}
-          onClose={handleOrderCancel}
-          onConfirm={handleOrderConfirm}
-          startAddress={mapState.currentAddress || 'Адрес не указан'}
-          endAddress={mapState.destinationAddress || 'Адрес не указан'}
-          distance={mapState.routeInfo ? formatDistance(mapState.routeInfo.distance) : 'Не рассчитано'}
-          duration={mapState.routeInfo ? formatDuration(mapState.routeInfo.duration) : 'Не рассчитано'}
-          price={selectedPrice}
-        />
-
+<OrderConfirmDialog
+  visible={isOrderConfirmOpen}
+  onClose={handleOrderCancel}
+  onConfirm={handleOrderConfirm}
+  startAddress={mapState.currentAddress || 'Адрес не указан'}
+  endAddress={mapState.destinationAddress || 'Адрес не указан'}
+  distance={mapState.routeInfo ? formatDistance(mapState.routeInfo.distance) : 'Не рассчитано'}
+  duration={mapState.routeInfo ? formatDuration(mapState.routeInfo.duration) : 'Не рассчитано'}
+  price={selectedPrice}
+  orderData={{
+    passengerId: 'current-user-id',
+    startLocation: mapState.userLocation || { latitude: 0, longitude: 0 },
+    endLocation: mapState.destination || { latitude: 0, longitude: 0 },
+    numericPrice: parseInt(selectedPrice.replace('₽', '')) || 0,
+  }}
+/>
 
         <PriceModal
-           visible={isPriceSheetOpen}
-           onClose={() => setIsPriceSheetOpen(false)}
-           onPriceSubmit={handlePriceSubmit}
+          visible={isPriceSheetOpen}
+          onClose={() => setIsPriceSheetOpen(false)}
+          onPriceSubmit={handlePriceSubmit}
         />
+
         <SideMenu
           visible={isMenuOpen}
           onClose={() => setIsMenuOpen(false)}
