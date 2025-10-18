@@ -2,12 +2,9 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Dimensions, Animated } from 'react-native';
 import { DriverIdlePanel } from './DriverPanel/DriverIdlePanel';
-// import { OrderListPanel } from './DriverPanel/OrderListPanel';
-// import { OrderDetailsPanel } from './DriverPanel/OrderDetailsPanel';
-// import { TripProgressPanel } from './DriverPanel/TripProgressPanel';
+import { OrderDetailsPanel } from './DriverPanel/OrderDetailsPanel';
 import { DriverState, DriverContext } from '../hooks/useDriverPanel';
-import { useOrders, Order } from '../providers/OrdersProvider';
- // Добавляем импорт Order
+import { Order } from '../types/order';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -16,11 +13,9 @@ interface DriverPanelProps {
   sendPanel: (event: any) => void;
   panelContext: DriverContext;
   mapState: any;
-  incomingOrders: Order[]; // Добавляем пропс для заказов
-  onAcceptOrder: (order: Order) => void; // Обработчик принятия заказа
-  onNavigateToPassenger?: () => void;
-  onStartTrip?: () => void;
-  onCompleteTrip?: () => void;
+  incomingOrders: Order[];
+  onAcceptOrder: (order: Order) => void;
+  onShowRoute?: (startLocation: { latitude: number; longitude: number }, endLocation: { latitude: number; longitude: number }) => void;
 }
 
 export function DriverPanel({
@@ -30,6 +25,7 @@ export function DriverPanel({
   mapState,
   incomingOrders,
   onAcceptOrder,
+  onShowRoute
 }: DriverPanelProps) {
   const heightAnim = useRef(new Animated.Value(SCREEN_HEIGHT * 0.7)).current;
 
@@ -37,23 +33,25 @@ export function DriverPanel({
     switch (panelState) {
       case 'idle':
         return SCREEN_HEIGHT * 0.7;
-      case 'order_list':
-      case 'order_details':
-        return SCREEN_HEIGHT * 0.8;
-      case 'navigating_to_passenger':
-      case 'waiting_for_passenger':
-      case 'trip_in_progress':
-        return SCREEN_HEIGHT * 0.4;
-      case 'trip_completed':
-        return SCREEN_HEIGHT * 0.5;
-      default:
-        return SCREEN_HEIGHT * 0.7;
+      case 'order_details': // Детали заказа
+        return SCREEN_HEIGHT * 0.45;
+      // case 'ordering':
+      // case 'confirming':
+      //   return SCREEN_HEIGHT * 0.6;
+      // case 'searching_driver':
+      // case 'driver_assigned':
+      //   return SCREEN_HEIGHT * 0.5;
+      // case 'in_progress':
+      //   return SCREEN_HEIGHT * 0.4;
+      // case 'completed':
+      //   return SCREEN_HEIGHT * 0.5;
+      // default:
+      //   return SCREEN_HEIGHT * 0.7;
     }
   };
 
   useEffect(() => {
     const targetHeight = getTargetHeight();
-    
     Animated.spring(heightAnim, {
       toValue: targetHeight,
       useNativeDriver: false,
@@ -62,6 +60,17 @@ export function DriverPanel({
     }).start();
   }, [panelState, heightAnim]);
 
+  const handleShowRoute = (startLocation: { latitude: number; longitude: number }, endLocation: { latitude: number; longitude: number }) => {
+    if (onShowRoute) {
+      onShowRoute(startLocation, endLocation);
+    }
+  };
+
+  const handleSubmitPrice = (price: number) => {
+    console.log('💰 Предложена цена:', price);
+    sendPanel({ type: 'START_ORDER', price });
+  };
+
   const renderPanelContent = () => {
     console.log('🔄 Rendering driver panel for state:', panelState);
     
@@ -69,72 +78,60 @@ export function DriverPanel({
       case 'idle':
         return (
           <DriverIdlePanel
-            earnings={panelContext.earnings || 2750}
-            onShowOrders={() => sendPanel({ type: 'SHOW_ORDERS' })}
-            incomingOrders={incomingOrders} // Передаем заказы
-            onAcceptOrder={onAcceptOrder} // Передаем обработчик
+            earnings={panelContext.earnings}
+            incomingOrders={incomingOrders}
+            onAcceptOrder={(order) => {
+              sendPanel({ type: 'SELECT_ORDER', order });
+            }}
           />
         );
       
-    //   case 'order_list':
-    //     return (
-    //       <OrderListPanel
-    //         orders={panelContext.orders}
-    //         onSelectOrder={(order) => sendPanel({ type: 'SELECT_ORDER', order })}
-    //         onBack={() => sendPanel({ type: 'BACK_TO_IDLE' })}
-    //       />
-    //     );
+      case 'order_details':
+        return (
+          <OrderDetailsPanel
+            order={panelContext.selectedOrder!}
+            onBack={() => sendPanel({ type: 'BACK_TO_LIST' })}
+            onSubmitPrice={handleSubmitPrice}
+            onShowRoute={handleShowRoute}
+          />
+        );
       
-    //   case 'order_details':
-    //     return (
-    //       <OrderDetailsPanel
-    //         order={panelContext.currentOrder}
-    //         onAcceptOrder={() => {
-    //           sendPanel({ type: 'ACCEPT_ORDER' });
-    //           onNavigateToPassenger?.();
-    //         }}
-    //         onBack={() => sendPanel({ type: 'BACK_TO_LIST' })}
-    //       />
-    //     );
+      // case 'ordering':
+      //   return (
+      //     <View className="flex-1 justify-center items-center p-6">
+      //       <Text className="text-lg font-semibold mb-4">Подтверждение заказа</Text>
+      //       <Text className="text-center mb-4">Цена: {panelContext.price}₽</Text>
+      //       <Button 
+      //         onPress={() => sendPanel({ type: 'CONFIRM_ORDER' })}
+      //         className="bg-green-500 px-6 py-3 rounded-lg"
+      //       >
+      //         <Text className="text-white font-semibold">Подтвердить заказ</Text>
+      //       </Button>
+      //       <Button 
+      //         onPress={() => sendPanel({ type: 'CANCEL_ORDER' })}
+      //         variant="outline"
+      //         className="mt-2"
+      //       >
+      //         <Text>Назад</Text>
+      //       </Button>
+      //     </View>
+      //   );
       
-      case 'navigating_to_passenger':
-      case 'waiting_for_passenger':
-    //   case 'trip_in_progress':
-    //     return (
-    //       <TripProgressPanel
-    //         state={panelState}
-    //         order={panelContext.currentOrder}
-    //         mapState={mapState}
-    //         onArriveAtPickup={() => sendPanel({ type: 'ARRIVE_AT_PICKUP' })}
-    //         onPassengerEntered={() => {
-    //           sendPanel({ type: 'PASSENGER_ENTERED' });
-    //           onStartTrip?.();
-    //         }}
-    //         onCompleteTrip={() => {
-    //           sendPanel({ type: 'COMPLETE_TRIP' });
-    //           onCompleteTrip?.();
-    //         }}
-    //         onCancelOrder={() => sendPanel({ type: 'CANCEL_ORDER' })}
-    //       />
-    //     );
+      // case 'searching_driver':
+      //   return (
+      //     <View className="flex-1 justify-center items-center p-6">
+      //       <Text className="text-lg font-semibold mb-4">Поиск пассажира...</Text>
+      //       <Text className="text-center mb-4">Ожидаем подтверждения</Text>
+      //     </View>
+      //   );
       
-    //   case 'trip_completed':
-    //     return (
-    //       <TripProgressPanel
-    //         state={panelState}
-    //         order={panelContext.currentOrder}
-    //         mapState={mapState}
-    //         onBackToIdle={() => sendPanel({ type: 'BACK_TO_IDLE' })}
-    //       />
-    //     );
-        
+      // Остальные состояния можно добавить позже
       default:
         return (
           <DriverIdlePanel
-            earnings={panelContext.earnings || 2750}
-            onShowOrders={() => sendPanel({ type: 'SHOW_ORDERS' })}
+            earnings={panelContext.earnings}
             incomingOrders={incomingOrders}
-            onAcceptOrder={onAcceptOrder}
+            onAcceptOrder={(order) => sendPanel({ type: 'SET_DESTINATION', order })}
           />
         );
     }

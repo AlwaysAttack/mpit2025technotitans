@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { MapPin, Clock, Car, CheckCircle } from 'lucide-react-native';
 import { useColorScheme } from 'nativewind';
-import { useOrders } from '../providers/OrdersProvider';
+import { Order } from '../types/order';
+import { useOrderSync } from '../hooks/useOrderSync';
 
 interface OrderConfirmDialogProps {
   visible: boolean;
@@ -37,7 +38,7 @@ export function OrderConfirmDialog({
   orderData
 }: OrderConfirmDialogProps) {
   const { colorScheme } = useColorScheme();
-  const { addOrder } = useOrders();
+  const { addOrder } = useOrderSync();
 
   const colors = {
     background: colorScheme === 'dark' ? 'bg-gray-900' : 'bg-white',
@@ -53,21 +54,26 @@ export function OrderConfirmDialog({
       const distanceMeters = parseInt(distance.replace(/[^\d]/g, '')) || 0;
       const durationSeconds = parseInt(duration.replace(/[^\d]/g, '')) * 60 || 0;
 
+      
+
+
       // Создаем заказ в общей системе
-      addOrder({
-        passengerName: 'Пассажир',
-        rating: 5.0,
-        carModel: 'Любой',
-        timeToArrival: '5-10 мин',
-        price: orderData.numericPrice,
-        startAddress,
-        endAddress,
-        distance: distanceMeters,
-        duration: durationSeconds,
-        passengerId: orderData.passengerId,
-        startLocation: orderData.startLocation,
-        endLocation: orderData.endLocation,
-      });
+      // addOrder({
+      //   id: Math.random().toString(36).substr(2, 9),
+      //   passengerId: orderData.passengerId,
+      //   startAddress,
+      //   endAddress,
+      //   startLocation: orderData.startLocation,
+      //   endLocation: orderData.endLocation,
+      //   distance: distanceMeters,
+      //   duration: durationSeconds,
+      //   price: orderData.numericPrice,
+      //   status: 'searching',  // соответствует твоему типу
+      //   createdAt: new Date(),
+      // });
+
+      console.log('📝 Создаём заказ:', addOrder); // <-- здесь можно проверить данные
+      
     }
     
     onConfirm();

@@ -19,3 +19,5 @@ export interface Order {
     createdAt: Date;
     driverId?: string;
   }
+
+export default Order;

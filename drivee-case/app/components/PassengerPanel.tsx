@@ -4,6 +4,8 @@ import { IdlePanel } from './PassengerPanel/IdlePanel';
 import { ProgressPanel } from './PassengerPanel/ProgressPanel';
 import { SearchingDriverPanel } from './PassengerPanel/SearchingDriverPanel';
 import { BookingState, BookingContext } from '../hooks/usePassengerPanel';
+import { useOrderSync } from '../hooks/useOrderSync';
+import { Order } from '../types/order';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -12,6 +14,7 @@ type TripType = 'ride' | 'intercity' | 'courier';
 interface PassengerPanelProps {
   mapState: any;
   selectedPrice: string;
+  currentOrder: Order | null;
   onSearchPress: () => void;
   onPricePress: () => void;
   onClearDestination: () => void;
@@ -23,6 +26,7 @@ interface PassengerPanelProps {
   panelState: BookingState;
   sendPanel: (event: any) => void;
   panelContext: BookingContext;
+  onCancelOrder?: () => void;
 }
 
 export function PassengerPanel({
@@ -38,10 +42,21 @@ export function PassengerPanel({
   formatDuration,
   panelState,
   sendPanel,
-  panelContext
+  panelContext,
+  currentOrder,
+  onCancelOrder
 }: PassengerPanelProps) {
-  // Анимационное значение для высоты
   const heightAnim = useRef(new Animated.Value(280)).current;
+  const { removeOrder } = useOrderSync();
+
+  // Обработчик отмены заказа
+  const handleCancelOrder = () => {
+    if (currentOrder) {
+      removeOrder(currentOrder.id);
+      sendPanel({ type: 'CANCEL_ORDER' }); // переводим панель в idle
+      if (onCancelOrder) onCancelOrder(); // вызываем внешний колбэк, если есть
+    }
+  };
 
   const getTargetHeight = () => {
     switch (panelState) {
@@ -58,23 +73,18 @@ export function PassengerPanel({
     }
   };
 
-  // Анимация при изменении состояния
+  // Плавная анимация изменения высоты панели
   useEffect(() => {
     const targetHeight = getTargetHeight();
-    
-    // Плавное изменение высоты
     Animated.spring(heightAnim, {
       toValue: targetHeight,
       useNativeDriver: false,
       friction: 8,
       tension: 40,
     }).start();
-
   }, [panelState, heightAnim]);
 
   const renderPanelContent = () => {
-    console.log('🔄 Rendering panel content for state:', panelState);
-    
     switch (panelState) {
       case 'idle':
       case 'destination_set':
@@ -92,9 +102,8 @@ export function PassengerPanel({
             formatDuration={formatDuration}
           />
         );
-      
+
       case 'searching_driver':
-        console.log('🚗 Rendering SearchingDriverPanel');
         return (
           <SearchingDriverPanel
             startAddress={mapState.currentAddress || 'Адрес не указан'}
@@ -102,10 +111,10 @@ export function PassengerPanel({
             distance={mapState.routeInfo ? formatDistance(mapState.routeInfo.distance) : 'Не рассчитано'}
             duration={mapState.routeInfo ? formatDuration(mapState.routeInfo.duration) : 'Не рассчитано'}
             price={selectedPrice}
-            onCancelOrder={() => sendPanel({ type: 'CANCEL_ORDER' })}
+            onCancelOrder={handleCancelOrder}
           />
         );
-      
+
       case 'driver_assigned':
       case 'in_progress':
         return (
@@ -113,20 +122,18 @@ export function PassengerPanel({
             state={panelState}
             context={panelContext}
             onRideCompleted={() => sendPanel({ type: 'RIDE_COMPLETED' })}
-            onReset={() => sendPanel({ type: 'RESET' })}
+            onReset={() => sendPanel({ type: 'CANCEL_ORDER' })}
           />
         );
-        
+
       default:
         return null;
     }
   };
 
   return (
-    <Animated.View 
-      style={{ 
-        height: heightAnim
-      }}
+    <Animated.View
+      style={{ height: heightAnim }}
       className="bg-white dark:bg-gray-800 rounded-t-3xl shadow-lg"
     >
       {renderPanelContent()}

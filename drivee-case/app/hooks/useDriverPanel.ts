@@ -1,5 +1,6 @@
 // hooks/useDriverPanel.ts
 import { useState, useCallback } from 'react';
+import { Order } from '../types/order'
 
 export type DriverState = 
   | 'idle'
@@ -11,7 +12,7 @@ export type DriverState =
   | 'trip_completed';
 
 export interface DriverContext {
-  currentOrder: any | null;
+  selectedOrder: Order | null;
   orders: any[];
   earnings: number;
   mapState?: any; // Добавляем опциональное поле для mapState
@@ -20,7 +21,7 @@ export interface DriverContext {
 export function useDriverPanel(initialContext: Partial<DriverContext> = {}) {
   const [state, setState] = useState<DriverState>('idle');
   const [context, setContext] = useState<DriverContext>({
-    currentOrder: null,
+    selectedOrder: null,
     orders: [],
     earnings: 0,
     ...initialContext,
@@ -34,7 +35,7 @@ export function useDriverPanel(initialContext: Partial<DriverContext> = {}) {
       
       switch (currentState) {
         case 'idle':
-          if (event.type === 'SHOW_ORDERS') nextState = 'order_list';
+          if (event.type === 'SELECT_ORDER') nextState = 'order_details';
           break;
         case 'order_list':
           if (event.type === 'SELECT_ORDER') nextState = 'order_details';
@@ -42,7 +43,7 @@ export function useDriverPanel(initialContext: Partial<DriverContext> = {}) {
           break;
         case 'order_details':
           if (event.type === 'ACCEPT_ORDER') nextState = 'navigating_to_passenger';
-          if (event.type === 'BACK_TO_LIST') nextState = 'order_list';
+          if (event.type === 'BACK_TO_LIST') nextState = 'idle';
           break;
         case 'navigating_to_passenger':
           if (event.type === 'ARRIVE_AT_PICKUP') nextState = 'waiting_for_passenger';
@@ -71,19 +72,11 @@ export function useDriverPanel(initialContext: Partial<DriverContext> = {}) {
 
     // Обновляем контекст на основе событий
     if (event.type === 'SELECT_ORDER') {
-      setContext(prev => ({ ...prev, currentOrder: event.order }));
-    } else if (event.type === 'UPDATE_ORDERS') {
-      setContext(prev => ({ ...prev, orders: event.orders }));
-    } else if (event.type === 'COMPLETE_TRIP' && context.currentOrder) {
-      setContext(prev => ({ 
-        ...prev, 
-        earnings: prev.earnings + context.currentOrder.price,
-        currentOrder: null 
-      }));
-    } else if (event.type === 'BACK_TO_IDLE') {
-      setContext(prev => ({ ...prev, currentOrder: null }));
-    }
-  }, [state, context.currentOrder]);
+      setContext(prev => ({ ...prev, selectedOrder: event.order }));
+    } else if (event.type === 'ACCEPT_ORDER') {
+      setContext(prev => ({ ...prev, currentOrder: context.selectedOrder }));
+    } 
+  }, [state, context.selectedOrder]);
 
   const updateContext = useCallback((updates: Partial<DriverContext>) => {
     console.log('🔄 Updating driver context with:', updates);

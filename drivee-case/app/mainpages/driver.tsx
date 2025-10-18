@@ -1,10 +1,10 @@
 // app/mainpages/driver.tsx
 import { Text } from '@/components/ui/text';
-import { Stack, useRouter } from 'expo-router';
-import { View, Dimensions, Modal, TouchableOpacity, FlatList, Alert, Animated } from 'react-native';
+import { Stack } from 'expo-router';
+import { View, Dimensions, Animated } from 'react-native';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
-import { Menu, Share, Navigation, Car, MapPin, Clock, SlidersHorizontalIcon, X, Search } from 'lucide-react-native';
+import { Menu, Share, Navigation } from 'lucide-react-native';
 import { useState, useEffect } from 'react';
 import * as Location from 'expo-location';
 import { useColorScheme } from 'nativewind';
@@ -14,59 +14,55 @@ import MapComponent from '../components/MapComponent';
 import { useMapNavigation } from '../hooks/useMapNavigation';
 import { DriverPanel } from '../components/DriverPanel';
 import { useDriverPanel } from '../hooks/useDriverPanel';
-import { useOrders, Order } from '../providers/OrdersProvider';
- // Добавляем импорт
+import { useOrderSync } from '../hooks/useOrderSync';
+import { Order } from '../types/order';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function DriverScreen() {
   const [topPanelOpacity] = useState(new Animated.Value(1));
-  const [refresh, setRefresh] = useState(0);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setRefresh(prev => prev + 1);
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  const animateTopPanel = (toValue: number) => {
-    Animated.timing(topPanelOpacity, {
-      toValue,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  
-  const {
-    mapState,
-    mapRef,
-    updateUserLocation,
-    setDestination,
-    setRoute,
-    centerMapOnUser,
-    fitMapToMarkers,
-    clearDestination,
-    calculateRoute
-  } = useMapNavigation();
-
   const [locationGranted, setLocationGranted] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { colorScheme } = useColorScheme();
 
-  // Используем хук панели водителя
+  const { mapState, mapRef, updateUserLocation, centerMapOnUser, calculateRoute } = useMapNavigation();
   const { state: panelState, send: sendPanel, context, updateContext } = useDriverPanel();
 
-  // Используем хук заказов для получения входящих заказов
-  const { getPendingOrders, acceptOrder } = useOrders();
-  const incomingOrders = getPendingOrders();
+  // -------------------- Используем useOrderSync --------------------
+  const { orders: incomingOrders, addOrder, acceptOrder } = useOrderSync();
 
-  console.log('🚗 DriverScreen перерендер. Заказов:', incomingOrders.length);
+  const handleShowRoute = (startLocation: { latitude: number; longitude: number }, endLocation: { latitude: number; longitude: number }) => {
+    console.log('🗺️ Показываем маршрут на карте');
+    calculateRoute(startLocation, endLocation);
+    
+    // Автовыравнивание карты на маршрут
+    setTimeout(() => {
+      if (mapRef.current) {
+        const coordinates = [startLocation, endLocation];
+        mapRef.current.fitToCoordinates(coordinates, {
+          edgePadding: { top: 100, right: 50, bottom: 400, left: 50 },
+          animated: true,
+        });
+      }
+    }, 500);
+  };
+
+  useEffect(() => {
+    (async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        setLocationGranted(true);
+        await getCurrentLocation(); // сразу вызываем
+      } else {
+        console.log('❌ Доступ к геолокации запрещён');
+        setLocationGranted(false);
+      }
+    })();
+  }, []);
+  
+  
 
   const TOP_PANEL_HEIGHT = 100;
-  
   const mapPadding = {
     top: TOP_PANEL_HEIGHT,
     bottom: panelState === 'idle' ? SCREEN_HEIGHT * 0.7 : SCREEN_HEIGHT * 0.4,
@@ -96,26 +92,10 @@ export default function DriverScreen() {
     textPrimary: colorScheme === 'dark' ? 'text-white' : 'text-gray-900',
     textSecondary: colorScheme === 'dark' ? 'text-gray-300' : 'text-gray-600',
     border: colorScheme === 'dark' ? 'border-gray-700' : 'border-gray-200',
-    button: colorScheme === 'dark' ? 'bg-gray-700' : 'bg-gray-100',
-    buttonActive: colorScheme === 'dark' ? 'bg-gray-600' : 'bg-white',
-    primary: 'bg-green-500',
   };
 
   useEffect(() => {
-    (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === 'granted') {
-        setLocationGranted(true);
-        getCurrentLocation();
-      }
-    })();
-  }, []);
-
-  // Обновляем контекст при изменении mapState
-  useEffect(() => {
-    updateContext({
-      mapState: mapState,
-    });
+    updateContext({ mapState });
   }, [mapState, updateContext]);
 
   const reverseGeocode = async (latitude: number, longitude: number): Promise<string> => {
@@ -153,60 +133,28 @@ export default function DriverScreen() {
       updateUserLocation(null, 'Не удалось определить адрес');
     }
   };
-
-  // Обработчик принятия заказа
-  const handleAcceptOrder = (order: Order) => {
-    console.log('✅ Заказ принят:', order);
-    
-    // Обновляем статус заказа через хук
-    acceptOrder(order.id);
-  };
-
   
 
-  // Обработчики для панели водителя
-  const handleNavigateToPassenger = () => {
-    console.log('🚗 Navigating to passenger...');
-    // Логика навигации к пассажиру
-  };
-
-  const handleStartTrip = () => {
-    console.log('🚦 Starting trip...');
-    // Логика начала поездки
-  };
-
-  const handleCompleteTrip = () => {
-    console.log('🏁 Completing trip...');
-    // Логика завершения поездки
+  const handleAcceptOrder = (order: Order) => {
+    console.log('✅ Принял заказ:', order.id);
+    acceptOrder(order.id);
   };
 
   return (
     <>
       <Stack.Screen options={SCREEN_OPTIONS} />
       <View className={`flex-1 ${colors.background}`}>
-        
         <MapComponent
           ref={mapRef}
           data={mapState}
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-          }}
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
           mapPadding={mapPadding}
           showUserLocation={true}
           onMapReady={() => console.log('Driver map ready')}
-          onRegionChange={(region) => console.log('Driver region changed:', region)}
         />
 
         <View className="flex-1 justify-end">
-          {/* Анимированный блок "Точка подачи" для водителя */}
-          <Animated.View 
-            style={{ opacity: topPanelOpacity }}
-            className={`mx-4 mb-2 p-4 rounded-2xl shadow-lg ${colors.card}`}
-          >
+          <Animated.View style={{ opacity: topPanelOpacity }} className={`mx-4 mb-2 p-4 rounded-2xl shadow-lg ${colors.card}`}>
             <View className="flex-row items-center justify-between">
               <View className="flex-1">
                 <Text className={`text-sm ${colors.textSecondary}`}>Текущее местоположение</Text>
@@ -214,29 +162,21 @@ export default function DriverScreen() {
                   {mapState.currentAddress || 'Определение адреса...'}
                 </Text>
               </View>
-              
-              <Button
-                size="icon"
-                onPress={centerMapOnUser}
-                className={`rounded-full shadow-lg ${colorScheme === 'dark' ? 'bg-gray-700' : 'bg-white'}`}
-              >
+              <Button size="icon" onPress={centerMapOnUser} className={`rounded-full shadow-lg ${colorScheme === 'dark' ? 'bg-gray-700' : 'bg-white'}`}>
                 <Icon as={Navigation} className={`size-5 ${colorScheme === 'dark' ? 'text-white' : 'text-black'}`} />
               </Button>
             </View>
           </Animated.View>
 
-          {/* Панель водителя */}
           <DriverPanel
-      panelState={panelState}
-      sendPanel={sendPanel}
-      panelContext={context}
-      mapState={mapState}
-      incomingOrders={incomingOrders}
-      onAcceptOrder={handleAcceptOrder}
-      onNavigateToPassenger={() => {}}
-      onStartTrip={() => {}}
-      onCompleteTrip={() => {}}
-    />
+            panelState={panelState}
+            sendPanel={sendPanel}
+            panelContext={context}
+            mapState={mapState}
+            incomingOrders={incomingOrders}
+            onAcceptOrder={handleAcceptOrder}
+            onShowRoute={handleShowRoute}
+          />
         </View>
 
         {!locationGranted && (
@@ -247,10 +187,7 @@ export default function DriverScreen() {
           </View>
         )}
 
-        <SideMenu
-          visible={isMenuOpen}
-          onClose={() => setIsMenuOpen(false)}
-        />
+        <SideMenu visible={isMenuOpen} onClose={() => setIsMenuOpen(false)} />
       </View>
     </>
   );

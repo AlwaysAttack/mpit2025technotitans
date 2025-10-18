@@ -15,8 +15,10 @@ import { useMapNavigation } from '../hooks/useMapNavigation';
 import { OrderConfirmDialog } from '../components/OrderConfirmDialog';
 import { PassengerPanel } from '../components/PassengerPanel';
 import { usePassengerPanel } from '../hooks/usePassengerPanel';
-import { useOrders, Order } from '../providers/OrdersProvider';
+import { useOrderSync } from '../hooks/useOrderSync';
 import { useWebSocket } from '../hooks/useWebSocket';
+import { Order } from '../types/order';
+
 
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -31,10 +33,11 @@ type AddressSuggestion = {
 type TripType = 'ride' | 'intercity' | 'courier';
 
 export default function Account2Screen() {
+  const { removeOrder } = useOrderSync();
   // Анимация для верхней панели
   const [topPanelOpacity] = useState(new Animated.Value(1));
-  const { addOrder } = useOrders();
   const { sendOrder } = useWebSocket();
+  const { addOrder: addOrderToGlobal } = useOrderSync();
 
   const animateTopPanel = (toValue: number) => {
     Animated.timing(topPanelOpacity, {
@@ -304,29 +307,33 @@ export default function Account2Screen() {
     setIsOrderConfirmOpen(true);
   };
 
+  const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
+
   // Подтверждение заказа
   const handleOrderConfirm = () => {
     setIsOrderConfirmOpen(false);
     animateTopPanel(0);
   
-    const order = addOrder({
+    const order: Order = {
+      id: Math.random().toString(36).substr(2, 9),
       passengerId: 'current-user-id',
-      passengerName: 'Пассажир',
-      rating: 5.0,
-      carModel: 'Любой',
-      timeToArrival: '5-10 мин',
-      price: parseInt(selectedPrice.replace('₽', '')) || 0,
       startAddress: mapState.currentAddress || '',
       endAddress: mapState.destinationAddress || '',
-      distance: mapState.routeInfo?.distance || 0,
-      duration: mapState.routeInfo?.duration || 0,
       startLocation: mapState.userLocation || { latitude: 0, longitude: 0 },
       endLocation: mapState.destination || { latitude: 0, longitude: 0 },
-    });
+      distance: mapState.routeInfo?.distance || 0,
+      duration: mapState.routeInfo?.duration || 0,
+      price: parseInt(selectedPrice.replace('₽', '')) || 0,
+      status: 'searching',
+      createdAt: new Date(),
+    };
   
-    // Отправляем через WebSocket
-    sendOrder(order);
+    console.log('📝 Подтверждён заказ, данные:', order); // <-- проверка перед отправкой
+  
+    addOrderToGlobal(order); // 🟢 "Отправляем" заказ (в useOrderSync)
+    setCurrentOrder(order);
     
+
     sendPanel({ type: 'CONFIRM_ORDER' });
   };
 
@@ -383,6 +390,7 @@ export default function Account2Screen() {
 
           <PassengerPanel
             mapState={mapState}
+            currentOrder={currentOrder}
             selectedPrice={selectedPrice}
             onSearchPress={openSearchModal}
             onPricePress={handlePriceFieldPress}
@@ -395,6 +403,11 @@ export default function Account2Screen() {
             panelState={panelState}
             sendPanel={sendPanel}
             panelContext={context}
+            onCancelOrder={() => {
+              if (currentOrder) removeOrder(currentOrder.id);
+              setCurrentOrder(null);   
+              sendPanel({ type: 'RESET' });      
+            }}
           />
         </View>
 
