@@ -18,6 +18,44 @@
       "price": 300,
       "status": "searching",
       "createdAt": "2025-10-19T04:38:16.469Z"
+    },
+    {
+      "id": "1cf6c8ybc",
+      "passengerId": "current-user-id",
+      "startAddress": "49А,  улица Тухачевского,  Заводский район",
+      "endAddress": "Цирк",
+      "startLocation": {
+        "latitude": 55.3248413,
+        "longitude": 86.1301179
+      },
+      "endLocation": {
+        "latitude": 55.3452374,
+        "longitude": 86.0991447
+      },
+      "distance": 5015.5,
+      "duration": 460.6,
+      "price": 300,
+      "status": "searching",
+      "createdAt": "2025-10-19T05:14:37.013Z"
+    },
+    {
+      "id": "8krtbrids",
+      "passengerId": "current-user-id",
+      "startAddress": "49А,  улица Тухачевского,  Заводский район",
+      "endAddress": "Кемеровский областной театр кукол им. Аркадия Гайдара",
+      "startLocation": {
+        "latitude": 55.3248498,
+        "longitude": 86.1301235
+      },
+      "endLocation": {
+        "latitude": 55.3530371,
+        "longitude": 86.0804504
+      },
+      "distance": 6139.2,
+      "duration": 537.9,
+      "price": 320,
+      "status": "searching",
+      "createdAt": "2025-10-19T05:23:49.767Z"
     }
   ],
   "offers": [

@@ -11,7 +11,7 @@ import { PeakLogo } from '../../components/PeakLogo';
 import { useOfferSync, Offer } from '../../hooks/useOfferSync'; 
 import { useDriverPanel } from '@/app/hooks/useDriverPanel';
 import { OrderWaitingResponse } from './OrderWaitingResponse'; 
-
+import axios from "axios";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -105,11 +105,35 @@ export function OrderDetailsPanel({
     setProposedPrice(numericValue);
   };
 
-  const handlePeakPrice = () => {
+  const handlePeakPrice = async () => {
     // Автоматическая peak-цена (+15% от базовой)
-    const peakPrice = Math.round(order.price * 1.15);
-    setProposedPrice(peakPrice.toString());
-    setIsPeakTime(true);
+    const orderData = {
+      driver_rating: 4.9,
+      platform: "ios",               // или "android"
+      carmodel: "Sandero Stepway",
+      carname: "Renault",
+      driver_id: 12345,
+      user_id: 8199106,
+      order_timestamp: "2025-10-19 12:30:00",  // время создания заказа
+      tender_timestamp: "2025-10-19 12:30:30", // время предложения водителю
+      driver_reg_date: "2023-01-01",           // дата регистрации водителя
+      distance_in_meters: 5200,                // расстояние поездки (м)
+      duration_in_seconds: 780,                // длительность поездки (сек)
+      pickup_in_meters: 469,                   // расстояние до клиента (м)
+      pickup_in_seconds: 85,                   // время до клиента (сек)
+      price_start_local: 160,                  // базовая цена (начальная)
+      price_bid_local: 200                     // текущая ставка (bid)
+    };
+    
+    try {
+      const response = await axios.post("http://192.168.0.11:8000/optimal_price", orderData);
+      console.log("💰 Оптимальная цена:", response.data.optimal_bid);
+      console.log("📈 Вероятность принятия:", response.data.probability);
+      console.log("📊 Ожидаемый доход:", response.data.expected_income);
+    } catch (error) {
+      console.error("Ошибка при обращении к API:", error);
+    }
+
   };
 
   const handleSubmitPrice = () => {
