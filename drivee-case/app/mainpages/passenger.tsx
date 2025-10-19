@@ -159,21 +159,35 @@ export default function Account2Screen() {
 
   const reverseGeocode = async (latitude: number, longitude: number): Promise<string> => {
     try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=ru`
-      );
-      const data = await response.json();
-      
+      const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=ru`;
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'MyTestApp/1.0 (contact@example.com)', // 👈 обязателен
+        },
+      });
+  
+      const text = await response.text();
+  
+      // Если сервер вернул HTML — это не JSON, значит ошибка
+      if (!text.trim().startsWith('{')) {
+        console.error('❌ Ответ от Nominatim не JSON:', text.slice(0, 200));
+        return 'Ошибка от сервера геокодирования';
+      }
+  
+      const data = JSON.parse(text);
+  
       if (data && data.display_name) {
         const addressParts = data.display_name.split(',');
         return addressParts.slice(0, 2).join(', ');
       }
+  
       return 'Адрес не найден';
     } catch (error) {
       console.error('Error reverse geocoding:', error);
       return 'Ошибка определения адреса';
     }
   };
+  
 
   const getCurrentLocation = async () => {
     try {
