@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { Order } from '../types/order';
 
-const SERVER_URL = 'http://192.168.0.106:3000/orders'; // локальный сервер
+const SERVER_URL = 'http://192.168.0.11:3000/orders'; // локальный сервер
 
 export function useOrderSync() {
   const [orders, setOrders] = useState<Order[]>([]);

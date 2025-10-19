@@ -1,0 +1,17 @@
+[
+  "driver_rating",
+  "platform",
+  "carmodel",
+  "carname",
+  "driver_id",
+  "user_id",
+  "order_timestamp",
+  "tender_timestamp",
+  "driver_reg_date",
+  "distance_in_meters",
+  "duration_in_seconds",
+  "pickup_in_meters",
+  "pickup_in_seconds",
+  "price_start_local",
+  "price_bid_local"
+]

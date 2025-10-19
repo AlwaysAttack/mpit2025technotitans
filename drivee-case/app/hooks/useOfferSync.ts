@@ -1,7 +1,7 @@
 // hooks/useOfferSync.ts
 import { useState, useEffect } from 'react';
 
-const SERVER_URL = 'http://192.168.0.106:3000/offers'; // локальный сервер
+const SERVER_URL = 'http://192.168.0.11:3000/offers'; // локальный сервер
 
 export interface Offer {
   id: string;
