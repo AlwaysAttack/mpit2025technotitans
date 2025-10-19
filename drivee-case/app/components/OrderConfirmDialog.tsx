@@ -155,11 +155,11 @@ export function OrderConfirmDialog({
         {/* Кнопки */}
         <View className="p-6 border-t border-gray-700">
           <View className="space-y-3">
-            <Button onPress={handleConfirm} className="bg-green-500 py-4 rounded-xl">
+            <Button onPress={handleConfirm} className="bg-green-500 my-3 rounded-xl">
               <Text className="text-white font-semibold text-lg">Подтвердить заказ</Text>
             </Button>
-            <Button variant="outline" onPress={onClose} className="py-4 rounded-xl">
-              <Text className={`font-semibold ${colors.textPrimary}`}>Отмена</Text>
+            <Button variant="outline" onPress={onClose} className="my-3 rounded-xl">
+              <Text className={`font-semibold text-lg ${colors.textPrimary}`}>Отмена</Text>
             </Button>
           </View>
         </View>

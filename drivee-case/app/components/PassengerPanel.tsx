@@ -6,6 +6,9 @@ import { SearchingDriverPanel } from './PassengerPanel/SearchingDriverPanel';
 import { BookingState, BookingContext } from '../hooks/usePassengerPanel';
 import { useOrderSync } from '../hooks/useOrderSync';
 import { Order } from '../types/order';
+import { useOfferSync, Offer } from '../hooks/useOfferSync';
+
+
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -48,6 +51,13 @@ export function PassengerPanel({
 }: PassengerPanelProps) {
   const heightAnim = useRef(new Animated.Value(280)).current;
   const { removeOrder } = useOrderSync();
+  const { offers, addOffer, updateOffer, removeOffer } = useOfferSync();
+
+  const handleSelectOffer = (offer: Offer) => {
+    console.log('Выбран оффер:', offer.id);
+    // Например, обновляем статус оффера на accepted
+    updateOffer(offer.id, { status: 'accepted' });
+  };
 
   // Обработчик отмены заказа
   const handleCancelOrder = () => {
@@ -112,6 +122,8 @@ export function PassengerPanel({
             duration={mapState.routeInfo ? formatDuration(mapState.routeInfo.duration) : 'Не рассчитано'}
             price={selectedPrice}
             onCancelOrder={handleCancelOrder}
+            onSelectOffer={handleSelectOffer}
+            offers={offers}
           />
         );
 

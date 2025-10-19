@@ -8,6 +8,10 @@ import { MapPin, Clock, User, ArrowLeft, Crown } from 'lucide-react-native';
 import { useColorScheme } from 'nativewind';
 import { Order } from '../../types/order';
 import { PeakLogo } from '../../components/PeakLogo';
+import { useOfferSync, Offer } from '../../hooks/useOfferSync'; 
+import { useDriverPanel } from '@/app/hooks/useDriverPanel';
+import { OrderWaitingResponse } from './OrderWaitingResponse'; 
+
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -15,6 +19,7 @@ interface OrderDetailsPanelProps {
   order: Order;
   onBack: () => void;
   onSubmitPrice: (price: number) => void;
+  sendPanel: (event: any) => void;
   onShowRoute: (startLocation: { latitude: number; longitude: number }, endLocation: { latitude: number; longitude: number }) => void;
 }
 
@@ -22,7 +27,8 @@ export function OrderDetailsPanel({
   order, 
   onBack, 
   onSubmitPrice,
-  onShowRoute 
+  onShowRoute,
+  sendPanel
 }: OrderDetailsPanelProps) {
   const { colorScheme } = useColorScheme();
   const [proposedPrice, setProposedPrice] = useState(order.price.toString());
@@ -37,6 +43,11 @@ export function OrderDetailsPanel({
     border: colorScheme === 'dark' ? 'border-gray-700' : 'border-gray-200',
     inputBackground: colorScheme === 'dark' ? 'bg-gray-700' : 'bg-gray-50',
   };
+
+  const [panelState, setPanelState] = useState<'order_details' | 'waiting_offer'>('order_details');
+  const [currentOffer, setCurrentOffer] = useState<Offer | null>(null);
+  const { addOffer, removeOffer  } = useOfferSync();
+
 
   // Обработка клавиатуры
   useEffect(() => {
@@ -65,6 +76,8 @@ export function OrderDetailsPanel({
       onShowRoute(order.startLocation, order.endLocation);
     }
   }, [order, onShowRoute]);
+
+  
 
   const formatDistance = (meters: number): string => {
     if (meters < 1000) {
@@ -101,8 +114,40 @@ export function OrderDetailsPanel({
 
   const handleSubmitPrice = () => {
     const numericPrice = parseInt(proposedPrice) || order.price;
-    onSubmitPrice(numericPrice);
+
+    // Создаём оффер
+    const newOffer: Offer = {
+      id: Math.random().toString(36).substr(2, 9),
+      orderId: order.id,
+      passengerId: 'current-user-id',
+      price: numericPrice,
+      status: 'waiting',
+      createdAt: new Date().toISOString(),
+    };
+
+    // Отправляем оффер на сервер
+    addOffer(newOffer);
+
+    // Сохраняем оффер локально
+    setCurrentOffer(newOffer);
+
+    // Переключаем панель на ожидание
+    sendPanel({ type: 'GO_TO_ORDER_WAIT' });
+
+    console.log('💌 Offer sent, waiting for passenger:', newOffer);
   };
+
+  const handleCancelOffer = async () => {
+    if (currentOffer) {
+      await removeOffer(currentOffer.id);
+      setPanelState('order_details');
+      setCurrentOffer(null);
+    }
+  };
+
+  if (panelState === 'waiting_offer' && currentOffer) {
+    return <OrderWaitingResponse offerId={currentOffer.id} onCancel={handleCancelOffer} />;
+  }
 
   return (
     <View 

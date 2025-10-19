@@ -1,11 +1,13 @@
 // hooks/useDriverPanel.ts
 import { useState, useCallback } from 'react';
 import { Order } from '../types/order'
+import { Offer } from './useOfferSync';
 
 export type DriverState = 
   | 'idle'
   | 'order_list'
   | 'order_details'
+  | 'waiting_response'
   | 'navigating_to_passenger'
   | 'waiting_for_passenger'
   | 'trip_in_progress'
@@ -13,6 +15,7 @@ export type DriverState =
 
 export interface DriverContext {
   selectedOrder: Order | null;
+  selectedOffer?: Offer | null;
   orders: any[];
   earnings: number;
   mapState?: any; // Добавляем опциональное поле для mapState
@@ -42,8 +45,12 @@ export function useDriverPanel(initialContext: Partial<DriverContext> = {}) {
           if (event.type === 'BACK_TO_IDLE') nextState = 'idle';
           break;
         case 'order_details':
-          if (event.type === 'ACCEPT_ORDER') nextState = 'navigating_to_passenger';
+          if (event.type === 'GO_TO_ORDER_WAIT') nextState = 'waiting_response';
           if (event.type === 'BACK_TO_LIST') nextState = 'idle';
+          break;
+        case 'waiting_response':
+          if (event.type === 'ACCEPT_ORDER') nextState = 'navigating_to_passenger';
+          if (event.type === 'BACK_TO_ORDER') nextState = 'order_details';
           break;
         case 'navigating_to_passenger':
           if (event.type === 'ARRIVE_AT_PICKUP') nextState = 'waiting_for_passenger';

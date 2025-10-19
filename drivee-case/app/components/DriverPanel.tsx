@@ -3,6 +3,7 @@ import React, { useEffect, useRef } from 'react';
 import { View, Dimensions, Animated } from 'react-native';
 import { DriverIdlePanel } from './DriverPanel/DriverIdlePanel';
 import { OrderDetailsPanel } from './DriverPanel/OrderDetailsPanel';
+import { OrderWaitingResponse } from './DriverPanel/OrderWaitingResponse';
 import { DriverState, DriverContext } from '../hooks/useDriverPanel';
 import { Order } from '../types/order';
 
@@ -15,6 +16,7 @@ interface DriverPanelProps {
   mapState: any;
   incomingOrders: Order[];
   onAcceptOrder: (order: Order) => void;
+  removeOffer?: (offerId: string) => void;
   onShowRoute?: (startLocation: { latitude: number; longitude: number }, endLocation: { latitude: number; longitude: number }) => void;
 }
 
@@ -25,7 +27,8 @@ export function DriverPanel({
   mapState,
   incomingOrders,
   onAcceptOrder,
-  onShowRoute
+  onShowRoute,
+  removeOffer
 }: DriverPanelProps) {
   const heightAnim = useRef(new Animated.Value(SCREEN_HEIGHT * 0.7)).current;
 
@@ -35,7 +38,8 @@ export function DriverPanel({
         return SCREEN_HEIGHT * 0.7;
       case 'order_details': // Детали заказа
         return SCREEN_HEIGHT * 0.45;
-      // case 'ordering':
+      case 'waiting_response':
+        return SCREEN_HEIGHT * 0.45;
       // case 'confirming':
       //   return SCREEN_HEIGHT * 0.6;
       // case 'searching_driver':
@@ -68,7 +72,7 @@ export function DriverPanel({
 
   const handleSubmitPrice = (price: number) => {
     console.log('💰 Предложена цена:', price);
-    sendPanel({ type: 'START_ORDER', price });
+    sendPanel({ type: 'GO_TO_ORDER_WAIT', price });
   };
 
   const renderPanelContent = () => {
@@ -93,6 +97,7 @@ export function DriverPanel({
             onBack={() => sendPanel({ type: 'BACK_TO_LIST' })}
             onSubmitPrice={handleSubmitPrice}
             onShowRoute={handleShowRoute}
+            sendPanel={sendPanel}
           />
         );
       
@@ -117,13 +122,22 @@ export function DriverPanel({
       //     </View>
       //   );
       
-      // case 'searching_driver':
-      //   return (
-      //     <View className="flex-1 justify-center items-center p-6">
-      //       <Text className="text-lg font-semibold mb-4">Поиск пассажира...</Text>
-      //       <Text className="text-center mb-4">Ожидаем подтверждения</Text>
-      //     </View>
-      //   );
+      case 'waiting_response':
+  return (
+    <OrderWaitingResponse
+  offerId={panelContext.selectedOffer?.id ?? ''}
+  onCancel={() => {
+    // Возврат к предыдущему состоянию (например, order_details)
+    sendPanel({ type: 'BACK_TO_ORDER' }); 
+
+    // Если есть removeOffer, можно вызвать
+    if (panelContext.selectedOrder && removeOffer) {
+      removeOffer(panelContext.selectedOrder.id);
+    }
+  }}
+/>
+  );
+
       
       // Остальные состояния можно добавить позже
       default:

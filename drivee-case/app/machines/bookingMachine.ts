@@ -1,3 +1,4 @@
+//bookingMachine.ts
 export type BookingState = 
   | 'idle'              // Исходное состояние
   | 'destination_set'   // Назначение выбрано
@@ -53,10 +54,10 @@ export const bookingMachine = {
       CANCEL_ORDER: 'ordering',
     },
   },
-  searching_driver: {
+  waiting_response: {
     on: {
       DRIVER_ASSIGNED: 'driver_assigned',
-      CANCEL_ORDER: 'idle',
+      CANCEL_ORDER: 'destination_get',
     },
   },
   driver_assigned: {

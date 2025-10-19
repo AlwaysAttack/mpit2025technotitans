@@ -59,6 +59,10 @@ export default function Account2Screen() {
     calculateRoute
   } = useMapNavigation();
 
+  let lastGeocodeTime = 0;
+  const GEOCODE_DELAY = 1000; // 1 секунда между запросами
+
+
   const [locationGranted, setLocationGranted] = useState(false);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -158,38 +162,89 @@ export default function Account2Screen() {
   }, [selectedPrice, updatePrice]);
 
   const reverseGeocode = async (latitude: number, longitude: number): Promise<string> => {
+    // Задержка между запросами (требование Nominatim)
+    const now = Date.now();
+    if (now - lastGeocodeTime < GEOCODE_DELAY) {
+      await new Promise(resolve => setTimeout(resolve, GEOCODE_DELAY - (now - lastGeocodeTime)));
+    }
+    lastGeocodeTime = Date.now();
+  
     try {
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=ru`
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=ru&addressdetails=1`,
+        {
+          headers: {
+            'User-Agent': 'YourRideApp/1.0',
+            'Accept': 'application/json',
+          }
+        }
       );
-      const data = await response.json();
+
+      
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+  
+      const text = await response.text();
+      
+      // Проверяем, не является ли ответ HTML
+      if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+        console.warn('⚠️ Nominatim returned HTML instead of JSON');
+        throw new Error('HTML response received');
+      }
+  
+      const data = JSON.parse(text);
       
       if (data && data.display_name) {
-        const addressParts = data.display_name.split(',');
-        return addressParts.slice(0, 2).join(', ');
+        // Пытаемся получить более читаемый адрес
+        const address = data.display_name.split(',').slice(0, 3).join(', ');
+        return address;
       }
       return 'Адрес не найден';
     } catch (error) {
       console.error('Error reverse geocoding:', error);
-      return 'Ошибка определения адреса';
+      
+      // Fallback адрес на основе координат
+      return `Ш: ${latitude.toFixed(4)}, Д: ${longitude.toFixed(4)}`;
     }
   };
+  
+  
 
   const getCurrentLocation = async () => {
     try {
-      let location = await Location.getCurrentPositionAsync({});
+      let location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
       const { latitude, longitude } = location.coords;
       
-      const address = await reverseGeocode(latitude, longitude);
-      
+      // Сначала обновляем координаты
       updateUserLocation(
         { latitude, longitude },
-        address
+        'Определение адреса...'
       );
-
+  
+      // Затем пытаемся получить адрес асинхронно
+      setTimeout(async () => {
+        try {
+          const address = await reverseGeocode(latitude, longitude);
+          updateUserLocation(
+            { latitude, longitude },
+            address
+          );
+        } catch (geocodeError) {
+          console.log('Geocoding failed, using coordinates:', geocodeError);
+          updateUserLocation(
+            { latitude, longitude },
+            `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
+          );
+        }
+      }, 0);
+  
     } catch (error) {
       console.log('Error getting location:', error);
-      updateUserLocation(null, 'Не удалось определить адрес');
+      updateUserLocation(null, 'Не удалось определить местоположение');
     }
   };
 
@@ -200,18 +255,36 @@ export default function Account2Screen() {
     }
 
     setIsSearching(true);
+
     try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&accept-language=ru`
-      );
-      const data = await response.json();
-      setSearchResults(data);
-    } catch (error) {
-      console.error('Error searching addresses:', error);
-    } finally {
-      setIsSearching(false);
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&accept-language=ru`,
+      {
+        headers: {
+          'User-Agent': 'YourRideApp/1.0', // обязательно указывать
+          'Accept': 'application/json',
+        },
+      }
+    );
+
+    const text = await response.text();
+
+    if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+      console.warn('⚠️ Nominatim вернул HTML вместо JSON, возможно блокировка запросов');
+      setSearchResults([]);
+      return;
     }
-  };
+
+    const data: AddressSuggestion[] = JSON.parse(text);
+    setSearchResults(data);
+
+  } catch (error) {
+    console.error('Error searching addresses:', error);
+    setSearchResults([]);
+  } finally {
+    setIsSearching(false);
+  }
+};
 
   const selectAddress = (address: AddressSuggestion) => {
     console.log('📍 Address selected:', address.display_name);
