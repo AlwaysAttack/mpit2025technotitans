@@ -118,7 +118,7 @@ def train_model(train_path):
     print("РЕЗУЛЬТАТЫ НА ТЕСТАХ:")
     print("="*60)
     
-    THRESHOLD = 0.7 
+    THRESHOLD = 0.50
     y_pred_proba = model.predict_proba(X_test)[:, 1]
     y_pred = (y_pred_proba >= THRESHOLD).astype(int)
     

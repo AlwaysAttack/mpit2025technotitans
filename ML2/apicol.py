@@ -72,7 +72,7 @@ class ModelAPI:
 # Пример использования:
 api = ModelAPI("xxx_model.pkl")
 sample = {
-     "driver_rating": 4.9,
+     "driver_rating": 2,
      "platform": "ios",
      "carmodel": "Toyota",
      "carname": "Camry",
@@ -86,6 +86,6 @@ sample = {
      "pickup_in_meters": 500,
      "pickup_in_seconds": 60,
      "price_start_local": 100,
-     "price_bid_local": 120
+     "price_bid_local": 1000
  }
 print(api.predict(sample))
